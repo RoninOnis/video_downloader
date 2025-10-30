@@ -15,7 +15,6 @@ import contextlib
 
 class UniversalDownloaderApp:
     def __init__(self, root):
-        # Проверка на уже запущенный экземпляр
         if self.is_already_running():
             messagebox.showerror("Ошибка", "Программа уже запущена!")
             sys.exit(1)
@@ -24,11 +23,10 @@ class UniversalDownloaderApp:
         self.root.title("Universal Video Downloader")
         self.root.geometry("700x550")  # Немного увеличил высоту
         self.root.resizable(False, True)
-        
-        # Обработчик закрытия окна
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Стилизация
+        # Стиль
         self.style = ttk.Style()
         self.style.configure("TFrame", background="#f0f0f0")
         self.style.configure("TLabel", background="#f0f0f0", font=("Arial", 10))
@@ -36,7 +34,6 @@ class UniversalDownloaderApp:
         self.style.configure("TEntry", font=("Arial", 10))
         self.style.configure("TCombobox", font=("Arial", 10))
         
-        # Главный фрейм
         main_frame = ttk.Frame(root, padding=20)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
@@ -54,7 +51,6 @@ class UniversalDownloaderApp:
         self.url_entry.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=(0, 10))
         self.url_entry.insert(0, "https://")
         
-        # Добавляем обработчики событий для улучшения UX
         self.url_entry.bind('<Button-1>', self.on_url_entry_click)
         self.url_entry.bind('<FocusIn>', self.on_url_entry_focus)
         
@@ -80,7 +76,6 @@ class UniversalDownloaderApp:
                                     width=15, state="readonly")
         quality_combo.grid(row=0, column=1, sticky=tk.W)
         
-        # Скорость загрузки - ИСПРАВЛЕНО: 5M вместо 5W
         ttk.Label(settings_frame, text="Ограничение скорости:").grid(row=0, column=2, sticky=tk.W, padx=(20, 10))
         self.speed_var = tk.StringVar(value="5M")  # ИСПРАВЛЕНО ЗДЕСЬ
         speed_combo = ttk.Combobox(settings_frame, textvariable=self.speed_var, 
@@ -119,7 +114,7 @@ class UniversalDownloaderApp:
                                  width=50, state="readonly")
         name_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        # Логгирование
+        # Логи
         ttk.Label(main_frame, text="Лог выполнения:").grid(row=9, column=0, sticky=tk.W, pady=(5, 5))
         self.log_text = scrolledtext.ScrolledText(main_frame, wrap=tk.WORD, width=85, height=12)
         self.log_text.grid(row=10, column=0, columnspan=2, sticky=tk.NSEW)
@@ -156,7 +151,6 @@ class UniversalDownloaderApp:
         # Временные файлы
         self.temp_dir = None
         
-        # Настройка веса строк для растягивания
         main_frame.grid_rowconfigure(10, weight=1)
         main_frame.columnconfigure(1, weight=1)
         
@@ -200,7 +194,7 @@ class UniversalDownloaderApp:
             self.temp_dir = tempfile.mkdtemp(prefix="universal_downloader_")
             self.log_message(f"[INFO] Временная папка: {self.temp_dir}")
             
-            # Настраиваем yt-dlp
+            # Настройка yt-dlp
             self.setup_yt_dlp()
             
             self.log_message("[OK] Окружение настроено успешно!")
