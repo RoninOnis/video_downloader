@@ -49,6 +49,7 @@ _HAS_COOKIES = COOKIES_FILE.exists()
 # ─── Counters ────────────────────────────────────────────────────
 VISITOR_COUNT_FILE = Path("visitor_count.json")
 DOWNLOAD_COUNT_FILE = Path("download_count.json")
+HISTORY_FILE = Path("history.json")
 SETTINGS_FILE = Path("settings.json")
 visitor_count = 0
 download_count = 0
@@ -91,6 +92,25 @@ def save_download_count():
         tmp = DOWNLOAD_COUNT_FILE.with_suffix('.json.tmp')
         tmp.write_text(json.dumps({'count': download_count}), encoding='utf-8')
         tmp.replace(DOWNLOAD_COUNT_FILE)
+    except Exception:
+        pass
+
+def load_history() -> list:
+    if HISTORY_FILE.exists():
+        try:
+            data = json.loads(HISTORY_FILE.read_text(encoding='utf-8'))
+            return data.get('items', [])
+        except Exception:
+            pass
+    return []
+
+def save_history(items: list):
+    try:
+        # Keep last 50 entries
+        items = items[-50:]
+        tmp = HISTORY_FILE.with_suffix('.json.tmp')
+        tmp.write_text(json.dumps({'items': items}, ensure_ascii=False), encoding='utf-8')
+        tmp.replace(HISTORY_FILE)
     except Exception:
         pass
 
@@ -670,7 +690,7 @@ async def main_page():
     cancel_requested = False
     before_files = set()
     progress_info = {'percent': 0.0, 'speed': '?', 'eta': '?', 'phase': 'idle', 'convert_start': 0}
-    history_data = []
+    history_data = load_history()  # persist across page reloads
     current_video_info = None
     playlist_videos = []
     playlist_skipped = set()
@@ -727,6 +747,7 @@ async def main_page():
 
     def add_history_item(filename: str, size_mb: float, full_path: str):
         history_data.append((filename, size_mb, full_path))
+        save_history(history_data)
         render_history()
 
     # ── File sending ──────────────────────────────────────────────
@@ -1654,7 +1675,8 @@ async def main_page():
             nonlocal video_duration
             video_duration = duration_sec
             if duration_sec > 0:
-                trim_range.props(f'max={duration_sec}')
+                trim_range._props['max'] = duration_sec
+                trim_range.update()
                 trim_range.set_value({'min': 0, 'max': min(duration_sec, 60)})
                 ms, ss = divmod(duration_sec, 60)
                 trim_end_label.set_text(f'{ms}:{ss:02d}')
@@ -1749,6 +1771,7 @@ async def main_page():
             result = await ui.confirm('Очистить всю историю загрузок?', cancel='Нет')
             if result:
                 history_data.clear()
+                save_history(history_data)
                 render_history()
                 ui.notify('История очищена', type='positive', position='top')
         confirm()
