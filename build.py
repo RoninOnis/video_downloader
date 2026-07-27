@@ -1,17 +1,14 @@
-# build.py
+# build.py — сборка 0xONI Downloader в .exe (Windows)
 import subprocess
 import sys
 import os
 import locale
 
 def setup_encoding():
-    """Настраивает кодировку для Windows"""
     try:
-        # Пытаемся установить UTF-8
         if sys.stdout.encoding != 'utf-8':
             sys.stdout.reconfigure(encoding='utf-8')
     except:
-        # Если не получается, используем системную кодировку
         try:
             encoding = locale.getpreferredencoding()
             sys.stdout.reconfigure(encoding=encoding)
@@ -19,90 +16,99 @@ def setup_encoding():
             pass
 
 def print_msg(message):
-    """Безопасный вывод сообщений"""
     try:
         print(message)
     except UnicodeEncodeError:
-        # Заменяем Unicode символы на текстовые
-        safe_message = message.replace('✅', '[OK]').replace('⏳', '[WAIT]').replace('🏗️', '[BUILD]')
-        safe_message = safe_message.replace('📁', '[FOLDER]').replace('🚀', '[ROCKET]').replace('🎉', '[PARTY]')
-        safe_message = safe_message.replace('💡', '[TIP]').replace('❌', '[ERROR]')
-        print(safe_message)
+        safe = message.replace('✅','[OK]').replace('⏳','[WAIT]').replace('🏗️','[BUILD]')
+        safe = safe.replace('📁','[FOLDER]').replace('🚀','[ROCKET]').replace('🎉','[PARTY]')
+        safe = safe.replace('💡','[TIP]').replace('❌','[ERROR]').replace('🌐','[WEB]')
+        print(safe)
 
 def install_dependencies():
-    """Устанавливает необходимые зависимости"""
-    dependencies = [
-        'yt-dlp',
-        'pyinstaller',
-        'requests'
-    ]
-    
-    for package in dependencies:
+    deps = ['yt-dlp', 'pyinstaller', 'nicegui', 'browser-cookie3', 'aiohttp']
+    for pkg in deps:
         try:
-            __import__(package.replace('-', '_'))
-            print_msg(f"✅ {package} уже установлен")
+            __import__(pkg.replace('-', '_'))
+            print_msg(f"✅ {pkg} уже установлен")
         except ImportError:
-            print_msg(f"⏳ Устанавливаем {package}...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-            print_msg(f"✅ {package} успешно установлен")
+            print_msg(f"⏳ Устанавливаем {pkg}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+            print_msg(f"✅ {pkg} успешно установлен")
 
 def build_executable():
-    """Собирает EXE файл"""
-    print_msg("🏗️ Собираем исполняемый файл...")
+    mode = sys.argv[1] if len(sys.argv) > 1 else 'web'
     
-    # Команда для PyInstaller
+    if mode == 'desktop':
+        # Десктопная Tkinter-версия
+        script = 'universal_downloader.py'
+        name = '0xONI_Downloader_Desktop'
+        windowed = True
+        hidden = ['yt_dlp', 'yt_dlp.extractor', 'yt_dlp.downloader', 'yt_dlp.postprocessor']
+    else:
+        # Веб-версия NiceGUI
+        script = 'yt-load.py'
+        name = '0xONI_Downloader_Web'
+        windowed = False  # консольное окно нужно для вывода URL
+        hidden = [
+            'yt_dlp', 'yt_dlp.extractor', 'yt_dlp.downloader',
+            'nicegui', 'browser_cookie3', 'aiohttp',
+        ]
+    
+    print_msg(f"🏗️ Сборка {name} из {script}...")
+    
     cmd = [
         'pyinstaller',
         '--onefile',
-        '--windowed',
-        '--name', 'UniversalDownloader',
-        '--hidden-import', 'yt_dlp',
-        '--hidden-import', 'yt_dlp.extractor',
-        '--hidden-import', 'yt_dlp.downloader',
-        '--hidden-import', 'yt_dlp.postprocessor',
+        '--name', name,
         '--collect-all', 'yt_dlp',
-        'universal_downloader.py'
+        '--collect-all', 'nicegui',
     ]
     
-    # Добавляем иконку если существует
+    if windowed:
+        cmd.append('--windowed')
+    
+    for imp in hidden:
+        cmd.extend(['--hidden-import', imp])
+    
     if os.path.exists('icon.ico'):
         cmd.extend(['--icon', 'icon.ico'])
+    
+    cmd.append(script)
     
     try:
         subprocess.check_call(cmd)
         print_msg("✅ Сборка завершена успешно!")
-        print_msg("📁 EXE файл находится в: dist/UniversalDownloader.exe")
-        print_msg("🚀 Теперь можно распространять этот файл!")
-        
+        print_msg(f"📁 EXE файл: dist/{name}.exe")
+        print_msg("🚀 Готово к распространению!")
+        return True
     except subprocess.CalledProcessError as e:
         print_msg(f"❌ Ошибка сборки: {e}")
         return False
     except Exception as e:
         print_msg(f"❌ Неожиданная ошибка: {e}")
         return False
-    
-    return True
 
 def main():
     setup_encoding()
-    
     print_msg("=" * 50)
-    print_msg("Universal Downloader - Автоматическая сборка")
+    print_msg("0xONI Downloader — Сборка EXE")
     print_msg("=" * 50)
+    print_msg("")
+    print_msg("Режимы: python build.py web     (веб-версия NiceGUI)")
+    print_msg("        python build.py desktop (десктопная Tkinter)")
+    print_msg("")
     
-    # Устанавливаем зависимости
     install_dependencies()
     print_msg("")
     
-    # Собираем EXE
     success = build_executable()
-    
     print_msg("")
+    
     if success:
-        print_msg("🎉 Все готово! Ваше приложение собрано.")
-        print_msg("💡 Файл UniversalDownloader.exe можно запускать на любом компьютере")
+        print_msg("🎉 Готово! EXE-файл в папке dist/")
+        print_msg("💡 Для веб-версии: запустите EXE и откройте http://localhost:8765")
     else:
-        print_msg("❌ Сборка не удалась. Проверьте ошибки выше.")
+        print_msg("❌ Сборка не удалась.")
 
 if __name__ == "__main__":
     main()
