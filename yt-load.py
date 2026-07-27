@@ -1104,7 +1104,8 @@ async def main_page():
             ydl_opts['cookiefile'] = str(COOKIES_FILE)
         
         # Download range — качаем сразу фрагмент, не весь файл
-        if trim_start_sec is not None and trim_end_sec is not None:
+        has_trim = trim_start_sec is not None and trim_end_sec is not None
+        if has_trim:
             ydl_opts['download_ranges'] = lambda info, ydl: [{
                 'start_time': trim_start_sec,
                 'end_time': trim_end_sec,
@@ -1119,6 +1120,9 @@ async def main_page():
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }]
+        elif has_trim:
+            # download_ranges requires merged stream — force 'best'
+            ydl_opts['format'] = 'best'
         elif custom_format_id:
             ydl_opts['format'] = custom_format_id
         else:
