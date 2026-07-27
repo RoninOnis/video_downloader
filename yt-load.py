@@ -890,6 +890,9 @@ async def main_page():
                 preview_row.update()
                 add_log(f'Найдено: {title[:80]}', '#4ade80')
                 
+                # Update trim slider max to video duration
+                update_trim_range(int(duration))
+                
                 # Auto-fetch formats
                 await fetch_formats(url)
                 render_format_list()
@@ -1586,11 +1589,76 @@ async def main_page():
             subtitles_opt = ui.checkbox('📝 Субтитры (RU/EN)').props('color=indigo')
             enable_trim = ui.checkbox('✂️ Обрезать по времени').props('color=indigo')
         
-        # Trim time inputs (hidden by default)
-        with ui.row().classes('w-full gap-4 mt-2 items-center') as trim_row:
-            start_time = ui.input(label='Начало (сек или ЧЧ:ММ:СС)', placeholder='0 или 00:01:30', value='').props('outlined dense').classes('flex-1')
-            end_time = ui.input(label='Конец (сек или ЧЧ:ММ:СС)', placeholder='60 или 00:02:30', value='').props('outlined dense').classes('flex-1')
+        # Trim time inputs (hidden until enabled)
+        with ui.column().classes('w-full gap-2 mt-2') as trim_row:
+            # Range slider — двойной ползунок
+            trim_range = ui.range(min=0, max=100, value={'min': 0, 'max': 60}).props('label-always switch-label-side color=indigo').classes('w-full')
+            # Метки времени
+            with ui.row().classes('w-full justify-between text-xs'):
+                trim_start_label = ui.label('0:00').style('color: var(--fg-muted)')
+                trim_end_label = ui.label('1:00').style('color: var(--fg-muted)')
+            # Текстовые поля для ручного ввода
+            with ui.row().classes('w-full gap-3 items-center'):
+                start_time = ui.input(label='Начало', placeholder='0 или 00:01:30', value='').props('outlined dense').classes('flex-1')
+                end_time = ui.input(label='Конец', placeholder='60 или 00:02:30', value='').props('outlined dense').classes('flex-1')
             trim_row.set_visibility(False)
+        
+        # Duration cache (заполняется при preview)
+        video_duration = 0
+        
+        def sync_slider_to_text():
+            """Обновляет текстовые поля из значений ползунка."""
+            v = trim_range.value
+            s, e = int(v['min']), int(v['max'])
+            ms, ss = divmod(s, 60)
+            me, se = divmod(e, 60)
+            start_time.set_value(f'{ms}:{ss:02d}')
+            end_time.set_value(f'{me}:{se:02d}')
+            trim_start_label.set_text(f'{ms}:{ss:02d}')
+            trim_end_label.set_text(f'{me}:{se:02d}')
+        
+        def sync_text_to_slider():
+            """Обновляет ползунок из текстовых полей."""
+            raw_s = start_time.value.strip()
+            raw_e = end_time.value.strip()
+            s = _parse_time_to_seconds(raw_s)
+            e = _parse_time_to_seconds(raw_e)
+            if s is not None and e is not None and s < e:
+                trim_range.set_value({'min': s, 'max': e})
+                ms, ss = divmod(s, 60)
+                me, se = divmod(e, 60)
+                trim_start_label.set_text(f'{ms}:{ss:02d}')
+                trim_end_label.set_text(f'{me}:{se:02d}')
+        
+        def _parse_time_to_seconds(val: str) -> int | None:
+            """Парсит '1:30' или '90' в секунды."""
+            if not val:
+                return None
+            val = val.strip()
+            if val.isdigit():
+                return int(val)
+            m = re.match(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$', val)
+            if m:
+                h = int(m.group(1)) if m.group(3) else 0
+                mi = int(m.group(2)) if m.group(3) else int(m.group(1))
+                s = int(m.group(3)) if m.group(3) else int(m.group(2))
+                return h * 3600 + mi * 60 + s
+            return None
+        
+        trim_range.on('update:model-value', sync_slider_to_text)
+        start_time.on('update:model-value', sync_text_to_slider)
+        end_time.on('update:model-value', sync_text_to_slider)
+        
+        def update_trim_range(duration_sec: int):
+            """Устанавливает max ползунка = длительности видео."""
+            nonlocal video_duration
+            video_duration = duration_sec
+            if duration_sec > 0:
+                trim_range.props(f'max={duration_sec}')
+                trim_range.set_value({'min': 0, 'max': min(duration_sec, 60)})
+                ms, ss = divmod(duration_sec, 60)
+                trim_end_label.set_text(f'{ms}:{ss:02d}')
+                sync_slider_to_text()
         
         def toggle_trim(e):
             trim_row.set_visibility(enable_trim.value)
