@@ -152,6 +152,34 @@ def validate_time_input(val: str) -> str | None:
         return val
     return None
 
+async def apply_ffmpeg_trim(input_path: str, start: str, end: str) -> str | None:
+    """Обрезает видео через ffmpeg -ss/-to без перекодировки. Возвращает путь к обрезанному файлу."""
+    if not os.path.exists(input_path):
+        return None
+    if not start and not end:
+        return None
+    if not shutil.which('ffmpeg'):
+        return None
+    # Имя: video_trimmed.mp4
+    p = Path(input_path)
+    output_path = str(p.with_stem(p.stem + '_trimmed'))
+    cmd = ['ffmpeg', '-i', input_path]
+    if start:
+        cmd.extend(['-ss', start])
+    if end:
+        cmd.extend(['-to', end])
+    cmd.extend(['-c', 'copy', output_path, '-y'])
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        await process.communicate()
+        if process.returncode == 0 and os.path.exists(output_path):
+            return output_path
+    except Exception:
+        pass
+    return None
+
 def safe_filename(title: str, max_length: int = 120) -> str:
     """Sanitize filename — remove problematic characters."""
     # Remove path separators and other dangerous chars
@@ -1222,6 +1250,32 @@ async def main_page():
                     add_log(f'🗑 Удалено {deleted} файлов (отмена)', '#fbbf24')
                 cancel_requested = False
             
+            # Trim after download (if enabled)
+            if not error_occurred and actual_file and os.path.exists(actual_file) and enable_trim.value:
+                raw_start = start_time.value.strip()
+                raw_end = end_time.value.strip()
+                trim_start = validate_time_input(raw_start)
+                trim_end = validate_time_input(raw_end)
+                if trim_start is None:
+                    add_log(f'⚠ Неверный формат начала: {raw_start}', '#fbbf24')
+                    trim_start = ''
+                if trim_end is None:
+                    add_log(f'⚠ Неверный формат конца: {raw_end}', '#fbbf24')
+                    trim_end = ''
+                if trim_start or trim_end:
+                    set_status('Обрезка видео...', 'active')
+                    progress.classes(remove='hidden')
+                    progress.props('indeterminate')
+                    trimmed = await apply_ffmpeg_trim(actual_file, trim_start, trim_end)
+                    progress.classes(add='hidden')
+                    progress.props(remove='indeterminate')
+                    if trimmed:
+                        actual_file = trimmed
+                        add_log(f'✂️ Обрезано: {Path(trimmed).name}', '#4ade80')
+                    else:
+                        add_log('⚠ Обрезка не удалась (возможно, нет ffmpeg). Отдаю полное видео.', '#fbbf24')
+                        ui.notify('Обрезка не выполнена, отдаётся полное видео', type='warning')
+            
             # Send file
             elif not error_occurred and actual_file and os.path.exists(actual_file):
                 try:
@@ -1530,6 +1584,17 @@ async def main_page():
         with ui.row().classes('w-full gap-6 mt-3 flex-wrap'):
             audio_only = ui.checkbox('🎵 Только аудио (MP3)').props('color=indigo')
             subtitles_opt = ui.checkbox('📝 Субтитры (RU/EN)').props('color=indigo')
+            enable_trim = ui.checkbox('✂️ Обрезать по времени').props('color=indigo')
+        
+        # Trim time inputs (hidden by default)
+        with ui.row().classes('w-full gap-4 mt-2 items-center') as trim_row:
+            start_time = ui.input(label='Начало (сек или ЧЧ:ММ:СС)', placeholder='0 или 00:01:30', value='').props('outlined dense').classes('flex-1')
+            end_time = ui.input(label='Конец (сек или ЧЧ:ММ:СС)', placeholder='60 или 00:02:30', value='').props('outlined dense').classes('flex-1')
+            trim_row.set_visibility(False)
+        
+        def toggle_trim(e):
+            trim_row.set_visibility(enable_trim.value)
+        enable_trim.on('update:model-value', toggle_trim)
         
         # Status dot + text
         status_html = ui.html(
