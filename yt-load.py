@@ -1253,34 +1253,34 @@ async def main_page():
                     add_log(f'🗑 Удалено {deleted} файлов (отмена)', '#fbbf24')
                 cancel_requested = False
             
-            # Trim after download (if enabled)
-            if not error_occurred and actual_file and os.path.exists(actual_file) and enable_trim.value:
-                raw_start = start_time.value.strip()
-                raw_end = end_time.value.strip()
-                trim_start = validate_time_input(raw_start)
-                trim_end = validate_time_input(raw_end)
-                if trim_start is None:
-                    add_log(f'⚠ Неверный формат начала: {raw_start}', '#fbbf24')
-                    trim_start = ''
-                if trim_end is None:
-                    add_log(f'⚠ Неверный формат конца: {raw_end}', '#fbbf24')
-                    trim_end = ''
-                if trim_start or trim_end:
-                    set_status('Обрезка видео...', 'active')
-                    progress.classes(remove='hidden')
-                    progress.props('indeterminate')
-                    trimmed = await apply_ffmpeg_trim(actual_file, trim_start, trim_end)
-                    progress.classes(add='hidden')
-                    progress.props(remove='indeterminate')
-                    if trimmed:
-                        actual_file = trimmed
-                        add_log(f'✂️ Обрезано: {Path(trimmed).name}', '#4ade80')
-                    else:
-                        add_log('⚠ Обрезка не удалась (возможно, нет ffmpeg). Отдаю полное видео.', '#fbbf24')
-                        ui.notify('Обрезка не выполнена, отдаётся полное видео', type='warning')
-            
-            # Send file
+            # Send file (with optional trim)
             elif not error_occurred and actual_file and os.path.exists(actual_file):
+                # Trim after download (if enabled)
+                if enable_trim.value:
+                    raw_start = start_time.value.strip()
+                    raw_end = end_time.value.strip()
+                    trim_start = validate_time_input(raw_start)
+                    trim_end = validate_time_input(raw_end)
+                    if trim_start is None:
+                        add_log(f'⚠ Неверный формат начала: {raw_start}', '#fbbf24')
+                        trim_start = ''
+                    if trim_end is None:
+                        add_log(f'⚠ Неверный формат конца: {raw_end}', '#fbbf24')
+                        trim_end = ''
+                    if trim_start or trim_end:
+                        set_status('Обрезка видео...', 'active')
+                        progress.classes(remove='hidden')
+                        progress.props('indeterminate')
+                        trimmed = await apply_ffmpeg_trim(actual_file, trim_start, trim_end)
+                        progress.classes(add='hidden')
+                        progress.props(remove='indeterminate')
+                        if trimmed:
+                            actual_file = trimmed
+                            add_log(f'✂️ Обрезано: {Path(trimmed).name}', '#4ade80')
+                        else:
+                            add_log('⚠ Обрезка не удалась (возможно, нет ffmpeg). Отдаю полное видео.', '#fbbf24')
+                            ui.notify('Обрезка не выполнена, отдаётся полное видео', type='warning')
+                
                 try:
                     size_mb = os.path.getsize(actual_file) / (1024 * 1024)
                     send_file_to_browser(actual_file)
