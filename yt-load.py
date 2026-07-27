@@ -1081,7 +1081,8 @@ async def main_page():
     # ── Download logic ────────────────────────────────────────────
     def build_ydl_opts(url: str, audio_only_flag: bool, quality_val: str, 
                        fmt_val: str, speed_val: str, subtitles_flag: bool,
-                       custom_format_id: str = None) -> dict:
+                       custom_format_id: str = None,
+                       trim_start_sec: float = None, trim_end_sec: float = None) -> dict:
         """Build yt-dlp options with site-specific presets."""
         outtmpl = str(DOWNLOAD_DIR / '%(title).80s_%(id)s_%(epoch)d.%(ext)s')
         
@@ -1101,6 +1102,14 @@ async def main_page():
         # Cookies file
         if _HAS_COOKIES:
             ydl_opts['cookiefile'] = str(COOKIES_FILE)
+        
+        # Download range — качаем сразу фрагмент, не весь файл
+        if trim_start_sec is not None and trim_end_sec is not None:
+            ydl_opts['download_ranges'] = lambda info, ydl: [{
+                'start_time': trim_start_sec,
+                'end_time': trim_end_sec,
+            }]
+            ydl_opts['force_keyframes_at_cuts'] = True
         
         # Format selection
         if audio_only_flag:
@@ -1193,10 +1202,24 @@ async def main_page():
                     if audio_only.value:
                         progress_info['convert_start'] = time.time()
             
+            # Parse trim range for download_ranges
+            trim_start_sec = None
+            trim_end_sec = None
+            if enable_trim.value:
+                raw_s = (start_time.value or '').strip()
+                raw_e = (end_time.value or '').strip()
+                ts = _parse_time_to_seconds(raw_s)
+                te = _parse_time_to_seconds(raw_e)
+                if ts is not None and te is not None and ts < te:
+                    trim_start_sec = float(ts)
+                    trim_end_sec = float(te)
+                    add_log(f'⏱ Фрагмент: {raw_s}–{raw_e}', '#a78bfa')
+            
             ydl_opts = build_ydl_opts(
                 url, audio_only.value, quality.value, 
                 fmt.value, speed.value, subtitles_opt.value,
-                selected_format_id
+                selected_format_id,
+                trim_start_sec, trim_end_sec
             )
             ydl_opts['progress_hooks'] = [hook]
             
@@ -1274,34 +1297,8 @@ async def main_page():
                     add_log(f'🗑 Удалено {deleted} файлов (отмена)', '#fbbf24')
                 cancel_requested = False
             
-            # Send file (with optional trim)
+            # Send file
             elif not error_occurred and actual_file and os.path.exists(actual_file):
-                # Trim after download (if enabled)
-                if enable_trim.value:
-                    raw_start = start_time.value.strip()
-                    raw_end = end_time.value.strip()
-                    trim_start = validate_time_input(raw_start)
-                    trim_end = validate_time_input(raw_end)
-                    if trim_start is None:
-                        add_log(f'⚠ Неверный формат начала: {raw_start}', '#fbbf24')
-                        trim_start = ''
-                    if trim_end is None:
-                        add_log(f'⚠ Неверный формат конца: {raw_end}', '#fbbf24')
-                        trim_end = ''
-                    if trim_start or trim_end:
-                        set_status('Обрезка видео...', 'active')
-                        progress.classes(remove='hidden')
-                        progress.props('indeterminate')
-                        trimmed = await apply_ffmpeg_trim(actual_file, trim_start, trim_end)
-                        progress.classes(add='hidden')
-                        progress.props(remove='indeterminate')
-                        if trimmed:
-                            actual_file = trimmed
-                            add_log(f'✂️ Обрезано: {Path(trimmed).name}', '#4ade80')
-                        else:
-                            add_log('⚠ Обрезка не удалась (возможно, нет ffmpeg). Отдаю полное видео.', '#fbbf24')
-                            ui.notify('Обрезка не выполнена, отдаётся полное видео', type='warning')
-                
                 try:
                     size_mb = os.path.getsize(actual_file) / (1024 * 1024)
                     send_file_to_browser(actual_file)
@@ -1379,6 +1376,7 @@ async def main_page():
                     v_url, audio_only.value, quality.value,
                     fmt.value, speed.value, subtitles_opt.value,
                     selected_format_id
+                    # no trim for playlists
                 )
                 ydl_opts['outtmpl'] = str(DOWNLOAD_DIR / '%(title).80s_%(id)s.%(ext)s')
                 
